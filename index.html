@@ -1,0 +1,183 @@
+<html>
+	<head>
+		<title>Pitcher Cabin Calendar Generator</title>
+		<script type='text/javascript' src='js/ics.min.js'></script>
+		<script type='text/javascript' src='js/moment.min.js'></script>
+		<script type='text/javascript' src='js/jquery.min.js'></script>
+		<script type='text/javascript'>
+			function initializeFamilies() {
+				var families = [
+						'Grandma Pitcher',
+						'Kenton & Marcia Wride',
+						'Mark & Andi Davis',
+						//'<Renter>',
+						'Roger & Shauna Andersen',
+						'Steve & Mindy Pitcher',
+						'Tom & Karine Pitcher',
+						//'<Renter>'
+					].join('\n');
+				
+				$('#families').text(families);
+			}
+			
+			function initializeNumYears() {
+				var numYearsHTML = '';
+				for (var i = 1; i <= 10; i++) {
+					numYearsHTML += '<option>' + i + '</option>';
+				}
+				
+				$('#numYears').html(numYearsHTML);
+			}
+			
+			function initializeStartYear() {
+				var startYear = parseInt(moment().format('YYYY'), 10);
+				var startYearHTML = '';
+				for (var i = 0; i < 10; i++) {
+					startYearHTML += '<option>' + startYear + '</option>';
+					startYear++;
+				}
+				
+				$('#startYear').html(startYearHTML);
+			}
+			
+			function getFamilies() {
+				return $('#families').text().split('\n');
+			}
+			
+			function getNumYears() {
+				return parseInt($('#numYears').val(), 10);
+			}
+			
+			function getStartYear() {
+				return parseInt($('#startYear').val(), 10);
+			}
+			
+			function addWeek(m) {
+				return moment(m).add(7, 'days').subtract(1, 'seconds');
+			}
+			
+			function getBlockedDates(year) {
+				var makeDate = function(year, month, day) {
+					return moment({ year: year, month: month - 1, day: day});
+				};
+				
+				return [
+					makeDate(year, 1, 1), // New Years
+					makeDate(year, 7, 4), // 4th of July
+					makeDate(year, 12, 25), // Christmas
+					makeDate(year + 1, 1, 1) // next year's New Years
+				];
+			}
+			
+			function weekIsGood(weekStart, blockedDates) {
+				var startDate = moment(weekStart.format('MM/DD/YYYY'), 'MM/DD/YYYY');
+				var endDate = addWeek(startDate);
+				
+				for (var i = 0; i < blockedDates.length; i++) {
+					var blockedDate = blockedDates[i];
+					
+					if (blockedDate.isSame(startDate, 'day') ||
+						blockedDate.isSame(endDate, 'day') ||
+						blockedDate.isBetween(startDate, endDate, 'day')) {
+						
+						// This week contains a blocked date.
+						return false;
+					}
+					
+					/*
+					var diffWithEnd = blockedDate.diff(endDate, 'days');
+					var diffWithStart = startDate.diff(blockedDate, 'days');
+					
+					var minDiff = 1; // Must be more than 1 day away from blocked date.
+					
+					if (diffWithEnd > 0 &&
+						diffWithEnd <= minDiff) {
+						
+						// This week is too close to the beginning of the blocked date.
+						return false;
+					}
+					
+					if (diffWithStart > 0 &&
+						diffWithStart <= minDiff) {
+						
+						// This week is too close to the end of the blocked date.
+						return false;
+					}*/
+				}
+				
+				return true;
+			}
+			
+			function getICS(startYear, numYears, families) {
+				var cal = ics();
+				
+				for (var year = startYear; year < startYear + numYears; year++) {
+					var familyIndex = year;
+					var blockedDates = getBlockedDates(year);
+					
+					var startDate = moment({year:0,month:0,day:0}).year(year).dayOfYear(1);
+					var firstDayOffset = (6 - startDate.weekday()) % 7;
+					if (firstDayOffset < 0) {
+						firstDayOffset += 7;
+					}
+					
+					startDate.add(firstDayOffset, 'days').add(12, 'hours');
+					
+					while (startDate.year() == year) {
+						if (weekIsGood(startDate, blockedDates)) {
+							var family = families[familyIndex++ % families.length];
+							addEvent(family, startDate, cal);
+						}
+						
+						startDate.add(7, 'days');
+					}
+				}
+				
+				return cal;
+			}
+			
+			function addEvent(family, startDate, cal) {
+				var endDate = addWeek(startDate);
+				
+				var formatString = 'MM/DD/YYYY h:mm a';
+				var dateStrings = {
+					start: startDate.format(formatString),
+					end: endDate.format(formatString)
+				};
+				
+				cal.addEvent('Cabin: ' + family, 'Cabin assigned to ' + family, 'Cabin', dateStrings.start, dateStrings.end);
+			}
+			
+			function downloadBtnClicked() {
+				var startYear = getStartYear();
+				var numYears = getNumYears();
+				var endYear = startYear + numYears - 1;
+				
+				var fileName = 'Pitcher Cabin Assignments - ' + (startYear == endYear ? startYear : startYear + '-' + endYear);
+				
+				getICS(startYear, numYears, getFamilies()).download(fileName);
+			}
+			
+			$(function() {
+				initializeFamilies();
+				initializeNumYears();
+				initializeStartYear();
+				
+				$('#downloadBtn').click(downloadBtnClicked);
+			});
+		</script>
+	</head>
+	<body>
+		<h2>Families</h2>
+		<textarea id='families' style='height: 150px'></textarea>
+		
+		<h2>Configuration</h2>
+		Generate events for <select id='numYears'></select> years starting in <select id='startYear'></select>
+		
+		<h2>Download</h2>
+		Click <a id='downloadBtn' href='javascript:void(0)'>here</a> to download the .ics file.
+		
+		<h2>What next?</h2>
+		Import the .ics file into Google Calendar. Visit <a href='https://support.google.com/calendar/answer/37118' target='_blank'>this page</a> for instructions.
+	</body>
+</html>
